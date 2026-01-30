@@ -3,7 +3,7 @@ module github.com/gopatchy/sacn
 go 1.25.6
 
 require (
-	github.com/gopatchy/multicast v0.0.0-20260130054439-3ccee9580408
+	github.com/gopatchy/multicast v0.0.0-20260130055445-f208d585e5b6
 	golang.org/x/net v0.49.0
 )
 
