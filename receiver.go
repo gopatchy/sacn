@@ -25,6 +25,29 @@ func NewUniverseReceiver(iface *net.Interface, universe uint16) (*Receiver, erro
 	}, nil
 }
 
+func NewMultiUniverseReceiver(iface *net.Interface, universes []uint16) (*Receiver, error) {
+	if len(universes) == 0 {
+		return nil, nil
+	}
+
+	c, err := multicast.ListenMulticastUDPPort("udp4", iface, Port)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, u := range universes {
+		if err := c.JoinGroup(MulticastAddr(u)); err != nil {
+			c.Close()
+			return nil, err
+		}
+	}
+
+	return &Receiver{
+		conn: c,
+		done: make(chan struct{}),
+	}, nil
+}
+
 func NewDiscoveryReceiver(iface *net.Interface) (*Receiver, error) {
 	c, err := multicast.ListenMulticastUDP("udp4", iface, DiscoveryAddr)
 	if err != nil {
