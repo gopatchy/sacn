@@ -4,47 +4,37 @@ import (
 	"net"
 	"time"
 
-	"golang.org/x/net/ipv4"
+	"github.com/gopatchy/multicast"
 )
 
 type Receiver struct {
-	conn    *ipv4.PacketConn
-	rawConn net.PacketConn
+	conn    *multicast.Conn
 	handler func(src *net.UDPAddr, pkt interface{})
 	done    chan struct{}
 }
 
-func NewReceiver(ifaceName string) (*Receiver, error) {
-	c, err := net.ListenPacket("udp4", ":5568")
+func NewUniverseReceiver(iface *net.Interface, universe uint16) (*Receiver, error) {
+	c, err := multicast.ListenMulticastUDP("udp4", iface, MulticastAddr(universe))
 	if err != nil {
 		return nil, err
 	}
 
-	p := ipv4.NewPacketConn(c)
-
-	if ifaceName != "" {
-		iface, err := net.InterfaceByName(ifaceName)
-		if err != nil {
-			c.Close()
-			return nil, err
-		}
-		p.SetMulticastInterface(iface)
-	}
-
 	return &Receiver{
-		conn:    p,
-		rawConn: c,
-		done:    make(chan struct{}),
+		conn: c,
+		done: make(chan struct{}),
 	}, nil
 }
 
-func (r *Receiver) JoinUniverse(iface *net.Interface, universe uint16) error {
-	group := net.IPv4(239, 255, byte(universe>>8), byte(universe&0xff))
-	return r.conn.JoinGroup(iface, &net.UDPAddr{IP: group})
-}
+func NewDiscoveryReceiver(iface *net.Interface) (*Receiver, error) {
+	c, err := multicast.ListenMulticastUDP("udp4", iface, DiscoveryAddr)
+	if err != nil {
+		return nil, err
+	}
 
-func (r *Receiver) JoinDiscovery(iface *net.Interface) error {
-	return r.conn.JoinGroup(iface, DiscoveryAddr)
+	return &Receiver{
+		conn: c,
+		done: make(chan struct{}),
+	}, nil
 }
 
 func (r *Receiver) SetHandler(fn func(src *net.UDPAddr, pkt interface{})) {
@@ -61,7 +51,7 @@ func (r *Receiver) Stop() {
 	default:
 		close(r.done)
 	}
-	r.rawConn.Close()
+	r.conn.Close()
 }
 
 func (r *Receiver) receiveLoop() {
@@ -74,7 +64,7 @@ func (r *Receiver) receiveLoop() {
 		default:
 		}
 
-		r.rawConn.SetReadDeadline(time.Now().Add(1 * time.Second))
+		r.conn.RawConn().SetReadDeadline(time.Now().Add(1 * time.Second))
 		n, _, src, err := r.conn.ReadFrom(buf)
 		if err != nil {
 			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
